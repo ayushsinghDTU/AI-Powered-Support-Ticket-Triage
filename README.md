@@ -1,93 +1,83 @@
 # AI-Powered Support Ticket Triage
 
-Minimal full-stack project that classifies support tickets using simple keyword-based NLP (no external AI APIs).
+## Demo Video
+Google Drive link: https://drive.google.com/file/d/1ZD2ZZ4sJV7I-VqmQDI0qUN5UL-K9C7IW/view?usp=sharing
 
-## 1. Setup Instructions
+The demo video should clearly show:
+- End-to-end workflow (submit ticket -> classification -> saved history)
+- Custom Security rule (`P0` override)
+- Persistence of analyzed tickets across requests
+- Docker-based execution using `docker-compose up --build`
 
-### Run with Docker (recommended)
+## Quick Start
 ```bash
 docker-compose up --build
 ```
 
-Then open:
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:3000`
+Then open: `http://localhost:5173`
 
-### Run tests
+## Setup and Verification
+Backend API runs on: `http://localhost:3000`
+
+Run backend tests:
 ```bash
 cd backend
 npm install
 npm test
 ```
 
-## 2. Architecture Explanation
+## Architecture
+- `backend/src/config/rules.js`: Classification keywords and priority rules.
+- `backend/src/analyzer/ticketAnalyzer.js`: Core keyword analysis logic.
+- `backend/src/services/ticketService.js`: Business flow for analyze + store + list.
+- `backend/src/controllers/ticketController.js`: Request validation and API responses.
+- `backend/src/db.js`: SQLite initialization and ticket queries.
+- `frontend/src/App.jsx`: UI for submission, result display, and history table.
+- `frontend/src/api.js`: Frontend API client functions.
 
-- `backend/src/config/rules.js`: Config-driven classification and priority rules.
-- `backend/src/analyzer/ticketAnalyzer.js`: Pure keyword analyzer logic.
-- `backend/src/services/ticketService.js`: Business flow (analyze + store, list).
-- `backend/src/controllers/ticketController.js`: HTTP input/output handling and validation.
-- `backend/src/db.js`: SQLite initialization and queries.
-- `frontend/src/App.jsx`: Minimal UI for submit + results + history table.
-- `frontend/src/api.js`: Fetch API calls.
-
-This keeps concerns separated and easy to explain in interviews.
-
-## 3. Data Model Explanation
-
+## Data Model
 SQLite table: `tickets`
 - `id` (integer primary key)
 - `message` (text)
 - `category` (text)
 - `priority` (text)
-- `urgency` (boolean stored as integer)
+- `urgency` (boolean as integer)
 - `keywords` (text, comma-separated)
 - `confidence` (real)
 - `created_at` (timestamp, default current timestamp)
 
-## 4. Classification Approach Explanation
+## Classification Approach
+1. Normalize and tokenize input message.
+2. Match keywords per category.
+3. Select the highest-scoring category, else `Other`.
+4. Detect urgency keywords.
+5. Assign priority (`Security -> P0`, urgent/technical -> `P1`, billing -> `P2`, else `P3`).
+6. Compute confidence as matched keywords / total words (capped at `1.0`, rounded to 2 decimals).
 
-1. Lowercase + tokenize the message.
-2. Count matched keywords for each category.
-3. Choose highest matched category; if none, use `Other`.
-4. Detect urgency via urgency keywords.
-5. Assign priority:
-   - `Security -> P0`
-   - `urgency true -> P1`
-   - `Technical -> P1`
-   - `Billing -> P2`
-   - otherwise `P3`
-6. Confidence = `matched_keywords / total_words`, capped at `1.0`, rounded to 2 decimals.
+## Customization Twist
+A custom override rule is implemented for security-sensitive tickets.
 
-## 5. Custom Rule Rationale
-
-If message contains `security` or `breach`, force:
+If the message contains `security` or `breach`, the system forces:
 - `category = Security`
 - `priority = P0`
 - `confidence = 1.0`
 
-Reason: security incidents are high-risk and time-sensitive, so they must bypass normal scoring and always be escalated immediately.
+Rationale:
+- Security incidents require immediate escalation regardless of general keyword scoring.
+- Forcing `category=Security` prevents misclassification into lower-risk categories.
+- Setting `priority=P0` ensures fastest possible response handling.
+- Setting `confidence=1.0` explicitly signals deterministic handling for high-risk cases.
 
-## 6. Trade-offs
+## Test Results
+Backend unit tests (Jest):
+- Test Suites: **1 passed**
+- Tests: **3 passed**
+- Includes:
+  - Billing classification test
+  - Urgency detection test
+  - Security override test
 
-- Pros: very simple, deterministic, explainable, easy to test.
-- Cons: keyword logic is brittle and may miss intent or context.
-
-## 7. Limitations
-
-- No stemming/synonym support.
-- No typo tolerance.
-- Confidence is heuristic, not probabilistic.
-- Basic UI and no authentication.
-
-## 8. Improvements With More Time
-
-- Add synonym dictionary and fuzzy matching.
-- Add ticket status/assignee fields.
-- Add pagination/filtering on ticket list.
-- Add integration tests for API endpoints.
-
-## 9. API Summary
-
+## API Summary
 ### `POST /tickets/analyze`
 Request:
 ```json
@@ -108,4 +98,4 @@ Response:
 ```
 
 ### `GET /tickets`
-Returns saved tickets (latest first).
+Returns saved tickets in descending order (latest first).
